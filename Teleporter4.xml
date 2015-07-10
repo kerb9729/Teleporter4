@@ -4,21 +4,17 @@
             <Anchor point="RIGHT" relativeTo="$(parent)" />
             <Dimensions y="23"/>
             <Controls>
-                <Texture name="$(parent)Faction">
-                    <Dimensions x="32" y="32"/>
+                <Label name="$(parent)Name" inherits="ZO_SelectableLabel" font="ZoFontHeader" >
+                    <Dimensions x="70"/>
                     <Anchor point="TOPLEFT" offsetX="0"/>
-                </Texture>
+                </Label>
                 <Label name="$(parent)Location" inherits="ZO_SelectableLabel" font="ZoFontHeader" >
                     <Dimensions x="160"/>
-                    <Anchor point="LEFT" relativeTo="$(parent)Faction" relativePoint="RIGHT" offsetX="10"/>
-                </Label>
-                <Label name="$(parent)NormalLevel" font="ZoFontHeader">
-                    <Dimensions x="40"/>
-                    <Anchor point="LEFT" relativeTo="$(parent)Location" relativePoint="RIGHT" offsetX="10"/>
+                    <Anchor point="LEFT" relativeTo="$(parent)Name" relativePoint="RIGHT" offsetX="10"/>
                 </Label>
             </Controls>
         </Control>
-        <TopLevelControl name="Atlas">
+        <TopLevelControl name="Teleporter4">
             <OnInitialized>
                 Tp4_OnInitialized()
             </OnInitialized>

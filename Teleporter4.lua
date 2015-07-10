@@ -39,7 +39,28 @@ local function createTp4RightPane()
 	TP4_RIGHTPANE:SetAnchor( point, relativeTo, relativePoint, offsetX, offsetY )
 	TP4_RIGHTPANE:SetHidden( true )
 
-	local buttonData = { 
+    --
+    -- Create Sort Headers
+    --
+    TP4_RIGHTPANE.Headers = WINDOW_MANAGER:CreateControl("$(parent)Headers",TP4_RIGHTPANE,nil)
+    TP4_RIGHTPANE.Headers:SetAnchor( TOPLEFT, TP4_RIGHTPANE, TOPLEFT, 0, 0 )
+    TP4_RIGHTPANE.Headers:SetHeight(32)
+
+    TP4_RIGHTPANE.Headers.Name = WINDOW_MANAGER:CreateControlFromVirtual("$(parent)Name",TP4_RIGHTPANE.Headers,"ZO_SortHeaderIcon")
+    TP4_RIGHTPANE.Headers.Name:SetDimensions(70,32)
+    TP4_RIGHTPANE.Headers.Name:SetAnchor( TOPLEFT, TP4_RIGHTPANE.Headers, TOPLEFT, 8, 0 )
+    ZO_SortHeader_InitializeArrowHeader(TP4_RIGHTPANE.Headers.Name, "nameHeader", ZO_SORT_ORDER_UP)
+    ZO_SortHeader_SetTooltip(TP4_RIGHTPANE.Headers.Name, "Sort on Name")
+
+    TP4_RIGHTPANE.Headers.Location = WINDOW_MANAGER:CreateControlFromVirtual("$(parent)Location",TP4_RIGHTPANE.Headers,"ZO_SortHeader")
+    TP4_RIGHTPANE.Headers.Location:SetDimensions(160,32)
+    TP4_RIGHTPANE.Headers.Location:SetAnchor( LEFT, TP4_RIGHTPANE.Headers.Name, RIGHT, 18, 0 )
+    ZO_SortHeader_Initialize(TP4_RIGHTPANE.Headers.Location, "Location List", "locationName", ZO_SORT_ORDER_UP, TEXT_ALIGN_LEFT, "ZoFontGameLargeBold")
+    ZO_SortHeader_SetTooltip(TP4_RIGHTPANE.Headers.Location, "Sort on Location")
+
+    local sortHeaders = ZO_SortHeaderGroup:New(TP4_RIGHTPANE:GetNamedChild("Headers"), SHOW_ARROWS)
+
+    local buttonData = {
 		normal = "EsoUI/Art/mainmenu/menubar_journal_up.dds",
 		pressed = "EsoUI/Art/mainmenu/menubar_journal_down.dds",
 		highlight = "EsoUI/Art/mainmenu/menubar_journal_over.dds",                  
@@ -113,15 +134,15 @@ local function createTp4Interface()
 ---    --
 ---    -- Add a faction texture
 ---    --
----    Tp4_TLW.FactionHeaderIconTexture = WINDOW_MANAGER:CreateControl(nil,  Tp4_TLW, CT_TEXTURE)
----    Tp4_TLW.FactionHeaderIconTexture:SetDimensions(120,120)
----    Tp4_TLW.FactionHeaderIconTexture:SetAnchor(TOP, Tp4_TLW, nil, (x/2)-140, 50)
+---    Tp4_TLW.NameHeaderIconTexture = WINDOW_MANAGER:CreateControl(nil,  Tp4_TLW, CT_TEXTURE)
+---    Tp4_TLW.NameHeaderIconTexture:SetDimensions(120,120)
+---    Tp4_TLW.NameHeaderIconTexture:SetAnchor(TOP, Tp4_TLW, nil, (x/2)-140, 50)
 ---    Tp4_TLW.factionTextureLeft:SetTexture("/esoui/art/campaign/overview_scoringbg_daggerfall_left.dds")
 ---    Tp4_TLW.factionTextureRight:SetTexture("/esoui/art/campaign/overview_scoringbg_daggerfall_right.dds")
----    Tp4_TLW.FactionHeaderIconTexture:SetTexture("/esoui/art/compass/ava_borderkeep_pin_daggerfall.dds")
----    Tp4_TLW.FactionHeaderIconTexture:SetHidden(false)
+---    Tp4_TLW.NameHeaderIconTexture:SetTexture("/esoui/art/compass/ava_borderkeep_pin_daggerfall.dds")
+---    Tp4_TLW.NameHeaderIconTexture:SetHidden(false)
 
----    Tp4_TLW.FactionHeaderIconTexture:SetTexture("")	--Will be set when zone gets determined
+---    Tp4_TLW.NameHeaderIconTexture:SetTexture("")	--Will be set when zone gets determined
 
 
     createTp4RightPane()
