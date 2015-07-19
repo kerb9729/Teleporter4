@@ -1,99 +1,109 @@
---- local mylibrary = LibStub:GetLibrary("mylibraryname")
---
-
 local Tp4Class = ZO_Object:Subclass()
 local Tp4=Tp4Class:New()
 
 Tp4.addonName = "Teleporter4"
-Tp4.chatWasMinimized = false
-Tp4.defaults = { }
+Tp4.defaults = {}
 Tp4.memberdata = {}
+Tp4.groupUnitTags = {}
 
 ZO_CreateStringId("TP4_NAME", "Teleporter4")
 
-local Tp4_TLW = nil
 local TP4_RIGHTPANE = nil
-local TP4_LOCATION_DATA = 1
+local TP4_SCROLLLIST_DATA = 1
 local TP4_ScrollList_SORT_KEYS =
 {
     ["playerName"] = { },
     ["zoneName"] = {  tiebreaker = "playerName" },
 }
 
---[[
-local function showTp4Windows(toggle)
-    --- Tp4_LootWindow:SetHidden( not toggle )
-    --- Tp4_Map:SetHidden( not toggle )
-    Tp4_TLW:SetHidden( not toggle )
-    if not toggle then
-        if not Tp4.chatWasMinimized then
-            CHAT_SYSTEM:Maximize()
+
+local function isInGroup(playerName)
+    for idx = 1, GetGroupSize() do
+        local groupUnitTag = GetGroupUnitTagByIndex(idx)
+        local unitName = GetUnitName(groupUnitTag)
+        local rawUnitName = GetRawUnitName(groupUnitTag)
+        local uniqueName = GetUniqueNameForCharacter(unitName)
+        if playerName == unitName then
+                return true
         end
     end
+    return false
 end
---]]
 
-local function getGuildMemberInfo()
+local function getGuildMemberInfo(tabletopopulate)
     local numGuilds = GetNumGuilds()
-    d( "numGuilds:" .. numGuilds )
-
+    local punitFaction = GetUnitAlliance("player")
+    local punitName = GetUnitName("player")
+    local prawUnitName = GetRawUnitName("player")
     local guildnum
+    local inlist = {}
+
     for guildnum = 1, numGuilds do
         local guildID = GetGuildId(guildnum)
         local numMembers = GetNumGuildMembers(guildID)
-        d("guildID:" .. guildID)
-        d("numMembers:" .. numMembers)
-        --[[
-        --GetGuildMemberInfo(integer guildId, integer memberIndex)
-              Returns: string name, string note, integer rankIndex, integer playerStatus, integer secsSinceLogoff
-          GetGuildMemberCharacterInfo(integer guildId, integer memberIndex)
-              Returns: boolean hasCharacter, string characterName, string zoneName, integer classType, integer alliance, integer level, integer veteranRank
-        --]]
         local member -- memberindex
+
         for member = 1, numMembers do
             local mi = {} --mi == "member info"
             mi.guildname = GetGuildName(guildID)
             mi.name, mi.note, mi.rankindex, mi.status, mi.secsincelastseen =
                 GetGuildMemberInfo(guildID,member)
-            if mi.status == 1 then
+            if mi.status == 1 then -- only collect info for online players
                 mi.hasCh, mi.chname, mi.zone, mi.class, mi.alliance, mi.level, mi.vr =
                     GetGuildMemberCharacterInfo(guildID, member)
-                d("mi.name:" .. mi.name .. "\n" ..
-                  "mi.note:" .. mi.note .. "\n" ..
-                  "mi.rankindex:" .. mi.rankindex .. "\n" ..
-                  "mi.status:" .. mi.status .. "\n" ..
-                  "mi.secsincelastseen:" .. mi.secsincelastseen .. "\n" ..
-                  "mi.hasCh:" .. tostring(mi.hasCh) .. "\n" ..
-                  "mi.chname:" .. mi.chname .. "\n" ..
-                  "mi.zone:".. mi.zone .. "\n" ..
-                  "mi.class:" .. mi.class .. "\n" ..
-                  "mi.alliance:" .. mi.alliance .. "\n" ..
-                  "mi.level:" .. mi.level .. "\n" ..
-                  "mi.vr:"  .. mi.vr .. "\n" )
-                table.insert(Tp4.memberdata, mi)
+                mi.unitname = mi.chname:gsub("%^.*$", "") -- Strips all after ^
+                --d("mi.name:" .. mi.name)
+                --d("mi.note:" .. mi.note)
+                --d("mi.rankindex:" .. mi.rankindex)
+                --d("mi.status:" .. mi.status)
+                --d("mi.secsincelastseen:" .. mi.secsincelastseen)
+                --d("mi.hasCh:" .. tostring(mi.hasCh))
+                --d("mi.chname:" .. mi.chname)
+                --d("mi.unitname:" .. mi.unitname)
+                --d("mi.zone:".. mi.zone)
+                --d("mi.class:" .. mi.class)
+                --d("mi.alliance:" .. mi.alliance)
+                --d("mi.level:" .. mi.level)
+                --d("mi.vr:"  .. mi.vr))
+                -- Don't display user, other factions, or players in Cyrodiil
+                if mi.chname ~= prawUnitName and mi.zone ~= "Cyrodiil" and mi.alliance == punitFaction then
+                    table.insert(tabletopopulate, mi)
+                    inlist[mi.unitname] = 1
+                end
             end
+        end
+    end
+    -- This should catch group members that aren't in a guild the player is in
+    for idx = 1, GetGroupSize() do
+        local mi = {}
+        local groupUnitTag = GetGroupUnitTagByIndex(idx)
+        mi.unitName = GetUnitName(groupUnitTag)
+        if inlist[mi.unitname] ~= nil and groupUnitTag ~= nil and IsUnitOnline(groupUnitTag) and mi.unitName ~= punitName then
+            mi.unitZone = GetUnitZone(groupUnitTag)
+            table.insert(tabletopopulate, mi)
         end
     end
 end
 
 local function populateScrollList(listdata)
     local displayed = {}
-    displayed[GetUnitName("player")] = 1
     local scrollData = ZO_ScrollList_GetDataList(TP4_RIGHTPANE.ScrollList)
+
     ZO_ClearNumericallyIndexedTable(scrollData)
 
-    for k, player in ipairs(listdata) do
-        if displayed[player.name] == nil then
-            table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_LOCATION_DATA,
+    for _, player in ipairs(listdata) do
+        if displayed[player.unitname] == nil then
+            table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_SCROLLLIST_DATA,
                 {
-                    playerName = player.name,
+                    playerName = player.unitname,
                     zoneName = player.zone
                 }
                 )
             )
-            displayed[player.name] = 1
+            displayed[player.unitname] = 1
         end
     end
+
     ZO_ScrollList_Commit(TP4_RIGHTPANE.ScrollList)
 end
 
@@ -146,19 +156,36 @@ local function createTp4RightPane()
     TP4_RIGHTPANE.ScrollList = WINDOW_MANAGER:CreateControlFromVirtual("$(parent)Tp4ScrollList", TP4_RIGHTPANE, "ZO_ScrollList")
     TP4_RIGHTPANE.ScrollList:SetDimensions(x, y-32)
     TP4_RIGHTPANE.ScrollList:SetAnchor(TOPLEFT, TP4_RIGHTPANE.Headers, BOTTOMLEFT, 0, 0)
+    --ZO_ScrollList_Initialize(TP4_RIGHTPANE.ScrollList)
+    -- ZO_ScrollList_EnableHighlight(TP4_RIGHTPANE.ScrollList, "ZO_ThinListHighlight")
 
     --
     -- Add a datatype to the scrollList
     --
-    ZO_ScrollList_Initialize(TP4_RIGHTPANE.ScrollList)
-    ZO_ScrollList_EnableHighlight(TP4_RIGHTPANE.ScrollList, "ZO_ThinListHighlight")
-    ZO_ScrollList_AddDataType(TP4_RIGHTPANE.ScrollList, TP4_LOCATION_DATA, "Tp4Row", 23,
+    ZO_ScrollList_AddDataType(TP4_RIGHTPANE.ScrollList, TP4_SCROLLLIST_DATA, "Tp4Row", 23,
         function(control, data)
-            control:GetNamedChild("Name"):SetText(data.playerName)
-            control:GetNamedChild("Location"):SetText(data.zoneName)
+            local nameLabel = control:GetNamedChild("Name")
+            local locationLabel = control:GetNamedChild("Location")
+            local friendColor = ZO_ColorDef:New(0.5, 1, 0, 1)
+            local groupColor = ZO_ColorDef:New(0.5, 0, 1, 1)
+
+            nameLabel:SetText(data.playerName)
+            locationLabel:SetText(data.zoneName)
+
+            if isInGroup(data.playerName) then
+                ZO_SelectableLabel_SetNormalColor(nameLabel, groupColor)
+                ZO_SelectableLabel_SetNormalColor(locationLabel, groupColor)
+
+            elseif IsFriend(data.playerName) then
+                ZO_SelectableLabel_SetNormalColor(nameLabel, friendColor)
+                ZO_SelectableLabel_SetNormalColor(locationLabel, friendColor)
+
+            else
+                ZO_SelectableLabel_SetNormalColor(nameLabel, ZO_NORMAL_TEXT)
+                ZO_SelectableLabel_SetNormalColor(locationLabel, ZO_NORMAL_TEXT)
+            end
         end
     )
-
 
     local buttonData = {
         normal = "EsoUI/Art/mainmenu/menubar_journal_up.dds",
@@ -193,8 +220,9 @@ end
 
 function Tp4:EVENT_PLAYER_ACTIVATED(...)
     d("|cFF2222Teleporter4|r addon loaded")
-    getGuildMemberInfo()
+    getGuildMemberInfo(Tp4.memberdata)
     populateScrollList(Tp4.memberdata)
+
     --
     -- Only once so unreg is from further events
     --
@@ -209,9 +237,17 @@ end
 
 function nameOnMouseUp(self, button, upInside)
     d("MouseUp:" .. self:GetText() .. ":" .. tostring(button) .. ":" .. tostring(upInside) )
-    JumpToGuildMember(self:GetText())
+    local sButton = tostring(button)
+
+    if sButton == "1" then -- left
+        JumpToGuildMember(self:GetText())
+
+    elseif sButton == "2" then -- right
+        ZO_ScrollList_RefreshVisible(TP4_RIGHTPANE.ScrollList)
+
+    else -- middle
+        getGuildMemberInfo(Tp4.memberdata)
+        populateScrollList(Tp4.memberdata)
+    end
 end
 
-function nameOnClicked(self, button)
-    d("Clicked:" .. self:GetText() .. ":" .. button)
-end
