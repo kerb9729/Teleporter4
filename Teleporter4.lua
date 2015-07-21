@@ -16,6 +16,11 @@ local TP4_ScrollList_SORT_KEYS =
     ["zoneName"] = {  tiebreaker = "playerName" },
 }
 
+local function hook(baseFunc,newFunc)
+    return function(...)
+        return newFunc(baseFunc,...)
+    end
+end
 
 local function isInGroup(playerName)
     for idx = 1, GetGroupSize() do
@@ -45,6 +50,7 @@ local function getGuildMemberInfo(tabletopopulate)
 
         for member = 1, numMembers do
             local mi = {} --mi == "member info"
+            mi.guildid = guildID
             mi.guildname = GetGuildName(guildID)
             mi.name, mi.note, mi.rankindex, mi.status, mi.secsincelastseen =
                 GetGuildMemberInfo(guildID,member)
@@ -64,7 +70,8 @@ local function getGuildMemberInfo(tabletopopulate)
                 --d("mi.class:" .. mi.class)
                 --d("mi.alliance:" .. mi.alliance)
                 --d("mi.level:" .. mi.level)
-                --d("mi.vr:"  .. mi.vr))
+                --d("mi.vr:"  .. mi.vr)
+                --d("mi.guildname:"  .. mi.guildname)
                 -- Don't display user, other factions, or players in Cyrodiil
                 if mi.chname ~= prawUnitName and mi.zone ~= "Cyrodiil" and mi.alliance == punitFaction then
                     table.insert(tabletopopulate, mi)
@@ -77,10 +84,15 @@ local function getGuildMemberInfo(tabletopopulate)
     for idx = 1, GetGroupSize() do
         local mi = {}
         local groupUnitTag = GetGroupUnitTagByIndex(idx)
-        mi.unitName = GetUnitName(groupUnitTag)
-        if inlist[mi.unitname] ~= nil and groupUnitTag ~= nil and IsUnitOnline(groupUnitTag) and mi.unitName ~= punitName then
-            mi.unitZone = GetUnitZone(groupUnitTag)
+        mi.unitname = GetUnitName(groupUnitTag)
+        if inlist[mi.unitname] ~= nil and groupUnitTag ~= nil and IsUnitOnline(groupUnitTag) and mi.unitname ~= punitName then
+            mi.zone = GetUnitZone(groupUnitTag)
+            mi.class = GetUnitClass(groupUnitTag)
+            mi.level = GetUnitLevel(groupUnitTag)
+            mi.vr = GetUnitVeteranRank(groupUnitTag)
+
             table.insert(tabletopopulate, mi)
+            inlist[mi.unitname] = 1
         end
     end
 end
@@ -93,13 +105,31 @@ local function populateScrollList(listdata)
 
     for _, player in ipairs(listdata) do
         if displayed[player.unitname] == nil then
-            table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_SCROLLLIST_DATA,
-                {
-                    playerName = player.unitname,
-                    zoneName = player.zone
-                }
+            if player.name ~= nil then
+                table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_SCROLLLIST_DATA,
+                    {
+                        playerName = player.unitname,
+                        zoneName = player.zone,
+                        playerClass = player.class,
+                        playerLevel = player.level,
+                        playerVr = player.vr,
+                        playeratName = player.name,
+                    }
                 )
-            )
+                )
+            else
+                table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_SCROLLLIST_DATA,
+                    {
+                        playerName = player.unitname,
+                        zoneName = player.zone,
+                        playerClass = player.class,
+                        playerLevel = player.level,
+                        playerVr = player.vr,
+                        playeratName = player.unitname,
+                    }
+                )
+                )
+            end
             displayed[player.unitname] = 1
         end
     end
@@ -119,9 +149,7 @@ local function createTp4RightPane()
 	TP4_RIGHTPANE:SetAnchor( point, relativeTo, relativePoint, offsetX, offsetY )
 	TP4_RIGHTPANE:SetHidden( true )
 
-    --
     -- Create Sort Headers
-    --
     TP4_RIGHTPANE.Headers = WINDOW_MANAGER:CreateControl("$(parent)Headers",TP4_RIGHTPANE,nil)
     TP4_RIGHTPANE.Headers:SetAnchor( TOPLEFT, TP4_RIGHTPANE, TOPLEFT, 0, 0 )
     TP4_RIGHTPANE.Headers:SetHeight(32)
@@ -156,20 +184,30 @@ local function createTp4RightPane()
     TP4_RIGHTPANE.ScrollList = WINDOW_MANAGER:CreateControlFromVirtual("$(parent)Tp4ScrollList", TP4_RIGHTPANE, "ZO_ScrollList")
     TP4_RIGHTPANE.ScrollList:SetDimensions(x, y-32)
     TP4_RIGHTPANE.ScrollList:SetAnchor(TOPLEFT, TP4_RIGHTPANE.Headers, BOTTOMLEFT, 0, 0)
-    --ZO_ScrollList_Initialize(TP4_RIGHTPANE.ScrollList)
-    -- ZO_ScrollList_EnableHighlight(TP4_RIGHTPANE.ScrollList, "ZO_ThinListHighlight")
 
-    --
     -- Add a datatype to the scrollList
-    --
     ZO_ScrollList_AddDataType(TP4_RIGHTPANE.ScrollList, TP4_SCROLLLIST_DATA, "Tp4Row", 23,
         function(control, data)
+
             local nameLabel = control:GetNamedChild("Name")
             local locationLabel = control:GetNamedChild("Location")
-            local friendColor = ZO_ColorDef:New(0.5, 1, 0, 1)
-            local groupColor = ZO_ColorDef:New(0.5, 0, 1, 1)
+
+            local friendColor = ZO_ColorDef:New(0.3, 1, 0, 1)
+            local groupColor = ZO_ColorDef:New(0.46, .73, .76, 1)
+            local selectedColor = ZO_ColorDef:New(0.7, 0, 0, 1)
+
+            local displayedlevel = nil
 
             nameLabel:SetText(data.playerName)
+
+            if data.playerLevel < 50 then
+                displayedlevel = data.playerLevel
+            else
+                displayedlevel = "VR" .. data.playerVr
+            end
+
+            nameLabel.tooltipText = data.playeratName .. "\n" .. displayedlevel .. " " .. GetClassName(1, data.playerClass)
+
             locationLabel:SetText(data.zoneName)
 
             if isInGroup(data.playerName) then
@@ -207,36 +245,43 @@ function Tp4:EVENT_ADD_ON_LOADED(eventCode, addonName, ...)
         Tp4.SavedVariables = ZO_SavedVars:New("Tp4_SavedVariables", 2, nil, Tp4.defaults)
         createTp4RightPane()
 
-        --SLASH_COMMANDS["/tp4"] = processSlashCommands
+        --SLASH_COMMANDS["/tp"] = processSlashCommands
 
         --
         -- Unregister events we are not using anymore
         --
         EVENT_MANAGER:UnregisterForEvent( Tp4.addonName, EVENT_ADD_ON_LOADED )
-        -- LINK_HANDLER:RegisterCallback(LINK_HANDLER.LINK_CLICKED_EVENT, function(...) return Tp4:OnLinkClicked(...) end)
     end
 end
 
 
 function Tp4:EVENT_PLAYER_ACTIVATED(...)
     d("|cFF2222Teleporter4|r addon loaded")
-    getGuildMemberInfo(Tp4.memberdata)
-    populateScrollList(Tp4.memberdata)
+    --getGuildMemberInfo(Tp4.memberdata)
+    --populateScrollList(Tp4.memberdata)
 
     --
     -- Only once so unreg is from further events
     --
-    EVENT_MANAGER:UnregisterForEvent( Tp4.addonName, EVENT_PLAYER_ACTIVATED )
+    EVENT_MANAGER:UnregisterForEvent(Tp4.addonName, EVENT_PLAYER_ACTIVATED)
 end
 
 
 function Tp4_OnInitialized()
     EVENT_MANAGER:RegisterForEvent(Tp4.addonName, EVENT_ADD_ON_LOADED, function(...) Tp4:EVENT_ADD_ON_LOADED(...) end )
     EVENT_MANAGER:RegisterForEvent(Tp4.addonName, EVENT_PLAYER_ACTIVATED, function(...) Tp4:EVENT_PLAYER_ACTIVATED(...) end)
+    ZO_WorldMap.SetHidden = hook(ZO_WorldMap.SetHidden,function(base,self,value)
+        base(self,value)
+        if value == false then
+            Tp4.memberdata = {}
+            getGuildMemberInfo(Tp4.memberdata)
+            populateScrollList(Tp4.memberdata)
+        end
+    end)
 end
 
 function nameOnMouseUp(self, button, upInside)
-    d("MouseUp:" .. self:GetText() .. ":" .. tostring(button) .. ":" .. tostring(upInside) )
+    --d("MouseUp:" .. self:GetText() .. ":" .. tostring(button) .. ":" .. tostring(upInside) )
     local sButton = tostring(button)
 
     if sButton == "1" then -- left
@@ -246,8 +291,13 @@ function nameOnMouseUp(self, button, upInside)
         ZO_ScrollList_RefreshVisible(TP4_RIGHTPANE.ScrollList)
 
     else -- middle
+        Tp4.memberdata = {}
         getGuildMemberInfo(Tp4.memberdata)
         populateScrollList(Tp4.memberdata)
     end
 end
+--[[
+EVENT_GROUP_MEMBER_JOINED (integer eventCode, string memberName)
+EVENT_GROUP_MEMBER_LEFT (integer eventCode, string memberName, integer reason, bool wasLocalPlayer)
 
+--]]
