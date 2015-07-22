@@ -37,27 +37,26 @@ end
 
 local function getGuildMemberInfo(tabletopopulate)
     local numGuilds = GetNumGuilds()
-    local punitFaction = GetUnitAlliance("player")
+    local punitAlliance = GetUnitAlliance("player")
     local punitName = GetUnitName("player")
     local prawUnitName = GetRawUnitName("player")
     local guildnum
-    local inlist = {}
 
     for guildnum = 1, numGuilds do
         local guildID = GetGuildId(guildnum)
         local numMembers = GetNumGuildMembers(guildID)
-        local member -- memberindex
+        local memberindex
 
-        for member = 1, numMembers do
+        for memberindex = 1, numMembers do
             local mi = {} --mi == "member info"
-            mi.guildid = guildID
-            mi.guildname = GetGuildName(guildID)
+
             mi.name, mi.note, mi.rankindex, mi.status, mi.secsincelastseen =
-                GetGuildMemberInfo(guildID,member)
+                GetGuildMemberInfo(guildID,memberindex)
             if mi.status == 1 then -- only collect info for online players
                 mi.hasCh, mi.chname, mi.zone, mi.class, mi.alliance, mi.level, mi.vr =
-                    GetGuildMemberCharacterInfo(guildID, member)
+                    GetGuildMemberCharacterInfo(guildID, memberindex)
                 mi.unitname = mi.chname:gsub("%^.*$", "") -- Strips all after ^
+                mi.guildnames = {GetGuildName(guildID),}
                 --d("mi.name:" .. mi.name)
                 --d("mi.note:" .. mi.note)
                 --d("mi.rankindex:" .. mi.rankindex)
@@ -71,66 +70,81 @@ local function getGuildMemberInfo(tabletopopulate)
                 --d("mi.alliance:" .. mi.alliance)
                 --d("mi.level:" .. mi.level)
                 --d("mi.vr:"  .. mi.vr)
-                --d("mi.guildname:"  .. mi.guildname)
+                --d("mi.guildnames:"  .. for _,v in pairs(mi.guildnames) do print(string.format("%s\n", v) end )
                 -- Don't display user, other factions, or players in Cyrodiil
-                if mi.chname ~= prawUnitName and mi.zone ~= "Cyrodiil" and mi.alliance == punitFaction then
-                    table.insert(tabletopopulate, mi)
-                    inlist[mi.unitname] = 1
+                if mi.chname ~= prawUnitName and tabletopopulate[mi.unitname] == nil and mi.zone ~= "Cyrodiil" and mi.alliance == punitAlliance then
+                    tabletopopulate[mi.unitname] = mi
+                elseif mi.chname ~= prawUnitName and mi.zone ~= "Cyrodiil" and mi.alliance == punitAlliance then
+                    -- Already got this player's data from a different guild
+                    table.insert(tabletopopulate[mi.unitname].guildnames, mi.guildnames)
                 end
             end
         end
     end
+
+    -- Todo - friends
+
     -- This should catch group members that aren't in a guild the player is in
     for idx = 1, GetGroupSize() do
         local mi = {}
         local groupUnitTag = GetGroupUnitTagByIndex(idx)
         mi.unitname = GetUnitName(groupUnitTag)
-        if inlist[mi.unitname] ~= nil and groupUnitTag ~= nil and IsUnitOnline(groupUnitTag) and mi.unitname ~= punitName then
+        if tabletopopulate[mi.unitname] == nil and groupUnitTag ~= nil and IsUnitOnline(groupUnitTag) and mi.unitname ~= punitName then
             mi.zone = GetUnitZone(groupUnitTag)
             mi.class = GetUnitClass(groupUnitTag)
             mi.level = GetUnitLevel(groupUnitTag)
             mi.vr = GetUnitVeteranRank(groupUnitTag)
+            --mi.guildnames = {"Player's Group", }
 
-            table.insert(tabletopopulate, mi)
-            inlist[mi.unitname] = 1
+            tabletopopulate[mi.unitname] = mi
         end
     end
 end
 
 local function populateScrollList(listdata)
-    local displayed = {}
+    -- local displayed = {}
     local scrollData = ZO_ScrollList_GetDataList(TP4_RIGHTPANE.ScrollList)
 
     ZO_ClearNumericallyIndexedTable(scrollData)
 
-    for _, player in ipairs(listdata) do
-        if displayed[player.unitname] == nil then
-            if player.name ~= nil then
-                table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_SCROLLLIST_DATA,
-                    {
-                        playerName = player.unitname,
-                        zoneName = player.zone,
-                        playerClass = player.class,
-                        playerLevel = player.level,
-                        playerVr = player.vr,
-                        playeratName = player.name,
-                    }
-                )
-                )
-            else
-                table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_SCROLLLIST_DATA,
-                    {
-                        playerName = player.unitname,
-                        zoneName = player.zone,
-                        playerClass = player.class,
-                        playerLevel = player.level,
-                        playerVr = player.vr,
-                        playeratName = player.unitname,
-                    }
-                )
-                )
+    for _, player in pairs(listdata) do
+        local guildlist = nil
+        local idx
+
+        if player.name ~= nil then
+            for idx = 1, #player.guildnames do
+                if guildlist ~= nil then
+                    guildlist = string.format("%s\n%s", player.guildnames[idx], guildlist)
+                else
+                    guildlist = player.guildnames[idx]
+                end
             end
-            displayed[player.unitname] = 1
+
+            table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_SCROLLLIST_DATA,
+                {
+                    playerName = player.unitname,
+                    zoneName = player.zone,
+                    playerClass = player.class,
+                    playerLevel = player.level,
+                    playerVr = player.vr,
+                    playeratName = player.name,
+                    playerGuilds = guildlist,
+                }
+            )
+            )
+        else
+            table.insert(scrollData, ZO_ScrollList_CreateDataEntry(TP4_SCROLLLIST_DATA,
+                {
+                    playerName = player.unitname,
+                    zoneName = player.zone,
+                    playerClass = player.class,
+                    playerLevel = player.level,
+                    playerVr = player.vr,
+                    playeratName = player.unitname,
+                    playerGuilds = "Grouped with player",
+                }
+            )
+            )
         end
     end
 
@@ -206,7 +220,7 @@ local function createTp4RightPane()
                 displayedlevel = "VR" .. data.playerVr
             end
 
-            nameLabel.tooltipText = data.playeratName .. "\n" .. displayedlevel .. " " .. GetClassName(1, data.playerClass)
+            nameLabel.tooltipText = string.format("%s\n%s %s\n%s", data.playeratName, displayedlevel, GetClassName(1, data.playerClass), data.playerGuilds)
 
             locationLabel:SetText(data.zoneName)
 
